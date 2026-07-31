@@ -1,0 +1,13 @@
+# Don't ship the local venv, caches, or run artifacts into the image.
+ppo_env/
+**/ppo_env/
+__pycache__/
+**/__pycache__/
+*.pyc
+checkpoints/
+runs/
+metrics/
+combined_metrics/
+.DS_Store
+*.zip
+.git/

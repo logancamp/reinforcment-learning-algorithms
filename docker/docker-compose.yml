@@ -1,0 +1,95 @@
+# Usage:
+#   docker compose build ppo               # CPU build
+#   docker compose run --rm ppo --env LunarLander-v3 --total-steps 500000
+#   docker compose run --rm ppo-lstm --env ALE/Pong-v5 --total-steps 3000000
+#   docker compose up board                # TensorBoard on http://localhost:6006
+#
+# GPU (Linux + NVIDIA + nvidia-container-toolkit only):
+#   docker compose build ppo-gpu
+#   docker compose run --rm ppo-gpu --env ALE/Pong-v5
+
+services:
+  ppo:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        TORCH_VARIANT: cpu
+    image: embodied-rl:cpu
+    working_dir: /app/PPO
+    # Bind-mounted under PPO/ on the host, same as the native (non-docker)
+    # layout produced by PPO/Makefile — keeps PPO and PPO-LSTM output separate.
+    volumes:
+      - ../PPO/checkpoints:/app/PPO/checkpoints
+      - ../PPO/runs:/app/PPO/runs
+      - ../PPO/metrics:/app/PPO/metrics
+    ports:
+      - "6006:6006"
+
+  ppo-lstm:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        TORCH_VARIANT: cpu
+    image: embodied-rl:cpu
+    working_dir: /app/PPO-LSTM
+    entrypoint: ["python", "-u", "main.py"]
+    volumes:
+      - ../PPO-LSTM/checkpoints:/app/PPO-LSTM/checkpoints
+      - ../PPO-LSTM/runs:/app/PPO-LSTM/runs
+      - ../PPO-LSTM/metrics:/app/PPO-LSTM/metrics
+
+  # GPU variants — require the NVIDIA Container Toolkit on a Linux host.
+  ppo-gpu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        TORCH_VARIANT: cuda
+    image: embodied-rl:cuda
+    working_dir: /app/PPO
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ../PPO/checkpoints:/app/PPO/checkpoints
+      - ../PPO/runs:/app/PPO/runs
+      - ../PPO/metrics:/app/PPO/metrics
+
+  ppo-lstm-gpu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        TORCH_VARIANT: cuda
+    image: embodied-rl:cuda
+    working_dir: /app/PPO-LSTM
+    entrypoint: ["python", "-u", "main.py"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ../PPO-LSTM/checkpoints:/app/PPO-LSTM/checkpoints
+      - ../PPO-LSTM/runs:/app/PPO-LSTM/runs
+      - ../PPO-LSTM/metrics:/app/PPO-LSTM/metrics
+
+  # TensorBoard over both variants' runs at once, distinguished by name.
+  board:
+    image: embodied-rl:cpu
+    entrypoint: ["tensorboard", "--logdir_spec",
+                 "ppo:/app/runs/ppo,ppo-lstm:/app/runs/ppo-lstm",
+                 "--host", "0.0.0.0"]
+    volumes:
+      - ../PPO/runs:/app/runs/ppo
+      - ../PPO-LSTM/runs:/app/runs/ppo-lstm
+    ports:
+      - "6006:6006"
